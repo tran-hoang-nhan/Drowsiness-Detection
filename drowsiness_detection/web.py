@@ -41,12 +41,16 @@ def generate_frames():
         ret, buffer = cv2.imencode('.jpg', result_frame)
         frame_bytes = buffer.tobytes()
         
-        # Emit status to frontend
+        # Emit status to frontend + âm thanh
         socketio.emit('status_update', {
             'drowsy': drowsy_status,
             'ear_value': float(ear_value),
             'timestamp': time.time()
         })
+        
+        # Âm thanh cảnh báo qua web
+        if drowsy_status:
+            socketio.emit('play_alarm', {'sound': True})
         
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')

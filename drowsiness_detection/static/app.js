@@ -16,8 +16,26 @@ const sessionTimeEl = document.getElementById('session-time');
 const earThreshold = document.getElementById('ear-threshold');
 const soundAlert = document.getElementById('sound-alert');
 
-// Audio for alerts
-const alertAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT');
+// Audio for alerts - Tạo âm thanh beep
+function createBeepSound() {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800; // 800Hz
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+}
+
+let lastAlertTime = 0;
 
 // Event listeners
 startBtn.addEventListener('click', startDetection);
@@ -103,9 +121,15 @@ socket.on('status_update', (data) => {
         statusAlert.className = 'alert alert-danger alert-drowsy';
         statusAlert.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>CẢNH BÁO: TÀI XẾ BUỒN NGỦ!</strong>';
         
-        // Play sound alert
-        if (soundAlert.checked) {
-            alertAudio.play().catch(e => console.log('Audio play failed:', e));
+        // Play sound alert - Chỉ phát 1 lần mỗi 2 giây
+        const now = Date.now();
+        if (soundAlert.checked && (now - lastAlertTime > 2000)) {
+            try {
+                createBeepSound();
+                lastAlertTime = now;
+            } catch (e) {
+                console.log('Audio play failed:', e);
+            }
         }
         
         // Vibrate if supported

@@ -19,11 +19,19 @@ class DrowsinessDetector:
         self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
         
-        # Detection parameters
-        self.CONSECUTIVE_FRAMES = 15
+        # Detection parameters - 3 giây = 90 frames (30fps)
+        self.CONSECUTIVE_FRAMES = 90  # 3 giây
         self.frame_counter = 0
         self.drowsy_counter = 0
         self.alarm_playing = False
+        
+        # Âm thanh cảnh báo
+        self.sound_enabled = True
+        try:
+            import winsound
+            self.winsound = winsound
+        except ImportError:
+            self.winsound = None
         
     def extract_features(self, eye_img):
         """Trích xuất features từ ảnh mắt"""
@@ -65,6 +73,19 @@ class DrowsinessDetector:
         
         return np.array(features).reshape(1, -1)
     
+    def play_alarm_sound(self):
+        """Phát âm thanh cảnh báo"""
+        try:
+            if self.winsound:
+                # Windows beep sound
+                self.winsound.Beep(800, 500)  # 800Hz, 500ms
+            else:
+                # Fallback - system bell
+                import os
+                os.system('echo \a')
+        except Exception as e:
+            print(f"Không thể phát âm thanh: {e}")
+    
     def detect(self, frame):
         """Phát hiện buồn ngủ bằng trained ML model"""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -103,37 +124,53 @@ class DrowsinessDetector:
                         prob = self.model.predict_proba(features)[0]
                         confidence = max(prob)
                         
-                        # 0 = closed, 1 = open
-                        if prediction == 0:  # Mắt nhắm
+                        # Kiểm tra prediction và confidence
+                        if prediction == 0 and confidence > 0.6:  # Mắt nhắm với confidence cao
                             closed_eyes += 1
                             cv2.putText(frame, "CLOSED", (x+ex, y+ey-10), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                        else:  # Mắt mở
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                        elif prediction == 1 and confidence > 0.6:  # Mắt mở với confidence cao
                             cv2.putText(frame, "OPEN", (x+ex, y+ey-10), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        else:
+                            # Confidence thấp - bỏ qua
+                            cv2.putText(frame, "UNSURE", (x+ex, y+ey-10), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
             
-            # Kiểm tra buồn ngủ
-            if total_eyes > 0 and closed_eyes >= total_eyes * 0.7:  # 70% mắt nhắm
-                self.frame_counter += 1
-                
-                if self.frame_counter >= self.CONSECUTIVE_FRAMES:
-                    drowsy_status = True
-                    self.drowsy_counter += 1
+            # Kiểm tra buồn ngủ - Chỉ đếm khi chắc chắn
+            if total_eyes > 0:
+                # Chỉ đếm khi có mắt nhắm với confidence cao
+                if closed_eyes >= total_eyes * 0.8:  # 80% mắt nhắm
+                    self.frame_counter += 1
                     
-                    # Hiển thị cảnh báo
-                    cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
-                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    # Hiển thị đếm ngược
+                    seconds_left = max(0, (self.CONSECUTIVE_FRAMES - self.frame_counter) / 30)
+                    cv2.putText(frame, f"Eyes closed: {seconds_left:.1f}s", (10, 100),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
                     
-                    if not self.alarm_playing:
-                        self.alarm_playing = True
-            else:
-                self.frame_counter = 0
-                self.alarm_playing = False
+                    if self.frame_counter >= self.CONSECUTIVE_FRAMES:
+                        drowsy_status = True
+                        self.drowsy_counter += 1
+                        
+                        # Hiển thị cảnh báo
+                        cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+                        
+                        # Âm thanh cảnh báo
+                        if not self.alarm_playing:
+                            self.play_alarm_sound()
+                            self.alarm_playing = True
+                else:
+                    if self.frame_counter > 0:
+                        self.frame_counter = max(0, self.frame_counter - 2)  # Giảm dần
+                    self.alarm_playing = False
             
-            # Hiển thị thông tin
+            # Hiển thị thông tin chi tiết
             cv2.putText(frame, f"Confidence: {confidence:.2f}", (10, 60),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             cv2.putText(frame, f"Closed: {closed_eyes}/{total_eyes}", (10, 80),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            cv2.putText(frame, f"Frame count: {self.frame_counter}", (300, 60),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         
         return frame, drowsy_status, confidence
