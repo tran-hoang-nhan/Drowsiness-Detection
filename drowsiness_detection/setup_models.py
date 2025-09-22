@@ -42,9 +42,9 @@ def download_dataset():
                     
                     for file in files:
                         src_file = os.path.join(src_path, file)
-                        if item == 'Open-Eyes':
+                        if 'open' in item.lower() or 'Open' in item:
                             dst_file = os.path.join('data/eyes/open', file)
-                        elif item == 'Closed-Eyes':
+                        elif 'closed' in item.lower() or 'Closed' in item:
                             dst_file = os.path.join('data/eyes/closed', file)
                         else:
                             print(f"Bỏ qua thư mục: {item}")
