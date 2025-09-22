@@ -1,102 +1,139 @@
 import cv2
-import mediapipe as mp
 import numpy as np
-from scipy.spatial import distance as dist
-import pygame
-import time
+import pickle
+import os
 
 class DrowsinessDetector:
     def __init__(self):
-        # Initialize MediaPipe face mesh
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        # Load trained model
+        model_path = 'models/eye_classifier.pkl'
+        if os.path.exists(model_path):
+            with open(model_path, 'rb') as f:
+                self.model = pickle.load(f)
+            print("✅ Đã load trained model")
+        else:
+            print("❌ Không tìm thấy trained model!")
+            self.model = None
         
-        # Eye landmarks indices for MediaPipe
-        self.LEFT_EYE = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
-        self.RIGHT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
+        # Load Haar Cascades
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
         
-        # Drowsiness parameters
-        self.EAR_THRESHOLD = 0.25
-        self.CONSECUTIVE_FRAMES = 20
+        # Detection parameters
+        self.CONSECUTIVE_FRAMES = 15
         self.frame_counter = 0
         self.drowsy_counter = 0
-        
-        # Initialize pygame for alarm
-        pygame.mixer.init()
-        self.alarm_sound = None
         self.alarm_playing = False
         
-    def eye_aspect_ratio(self, eye):
-        """Calculate Eye Aspect Ratio (EAR)"""
-        # Vertical distances
-        A = dist.euclidean(eye[1], eye[5])
-        B = dist.euclidean(eye[2], eye[4])
-        # Horizontal distance
-        C = dist.euclidean(eye[0], eye[3])
+    def extract_features(self, eye_img):
+        """Trích xuất features từ ảnh mắt"""
+        if eye_img is None or eye_img.size == 0:
+            return None
+            
+        # Resize về 32x32 như training data
+        eye_resized = cv2.resize(eye_img, (32, 32))
         
-        # EAR formula
-        ear = (A + B) / (2.0 * C)
-        return ear
+        # Convert to grayscale nếu cần
+        if len(eye_resized.shape) == 3:
+            eye_gray = cv2.cvtColor(eye_resized, cv2.COLOR_BGR2GRAY)
+        else:
+            eye_gray = eye_resized
+        
+        # Tính toán features (giống như trong train.py)
+        features = []
+        
+        # Basic statistics
+        features.extend([
+            np.mean(eye_gray),
+            np.std(eye_gray), 
+            np.var(eye_gray),
+            np.min(eye_gray),
+            np.max(eye_gray)
+        ])
+        
+        # Histogram features
+        hist = cv2.calcHist([eye_gray], [0], None, [8], [0, 256])
+        features.extend(hist.flatten())
+        
+        # Edge features
+        edges = cv2.Canny(eye_gray, 50, 150)
+        features.append(np.sum(edges) / (32 * 32))
+        
+        # Center region analysis
+        center = eye_gray[8:24, 8:24]
+        features.append(np.mean(center))
+        
+        return np.array(features).reshape(1, -1)
     
     def detect(self, frame):
-        """Main detection function"""
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(rgb_frame)
+        """Phát hiện buồn ngủ bằng trained ML model"""
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
         
         drowsy_status = False
-        ear_value = 0.0
+        confidence = 0.0
         
-        if results.multi_face_landmarks:
-            for face_landmarks in results.multi_face_landmarks:
-                # Get landmarks
-                h, w, _ = frame.shape
-                landmarks = np.array([(int(lm.x * w), int(lm.y * h)) for lm in face_landmarks.landmark])
+        for (x, y, w, h) in faces:
+            # Vẽ khung mặt
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+            
+            # Tìm mắt trong vùng mặt
+            roi_gray = gray[y:y+h, x:x+w]
+            roi_color = frame[y:y+h, x:x+w]
+            
+            eyes = self.eye_cascade.detectMultiScale(roi_gray)
+            
+            closed_eyes = 0
+            total_eyes = len(eyes)
+            
+            for (ex, ey, ew, eh) in eyes:
+                # Vẽ khung mắt
+                cv2.rectangle(roi_color, (ex, ey), (ex+ew, ey+eh), (0, 255, 0), 2)
                 
-                # Extract eye coordinates
-                left_eye = landmarks[self.LEFT_EYE]
-                right_eye = landmarks[self.RIGHT_EYE]
+                # Trích xuất vùng mắt
+                eye_img = roi_gray[ey:ey+eh, ex:ex+ew]
                 
-                # Calculate EAR for both eyes
-                left_ear = self.eye_aspect_ratio(left_eye[:6])  # Use first 6 points
-                right_ear = self.eye_aspect_ratio(right_eye[:6])
-                ear_value = (left_ear + right_ear) / 2.0
-                
-                # Draw eye contours
-                cv2.drawContours(frame, [cv2.convexHull(left_eye)], -1, (0, 255, 0), 1)
-                cv2.drawContours(frame, [cv2.convexHull(right_eye)], -1, (0, 255, 0), 1)
-                
-                # Check for drowsiness
-                if ear_value < self.EAR_THRESHOLD:
-                    self.frame_counter += 1
+                if self.model is not None:
+                    # Trích xuất features
+                    features = self.extract_features(eye_img)
                     
-                    if self.frame_counter >= self.CONSECUTIVE_FRAMES:
-                        drowsy_status = True
-                        self.drowsy_counter += 1
+                    if features is not None:
+                        # Dự đoán
+                        prediction = self.model.predict(features)[0]
+                        prob = self.model.predict_proba(features)[0]
+                        confidence = max(prob)
                         
-                        # Draw warning
-                        cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                        
-                        # Play alarm (simplified for web)
-                        if not self.alarm_playing:
-                            self.alarm_playing = True
-                else:
-                    self.frame_counter = 0
-                    self.alarm_playing = False
+                        # 0 = closed, 1 = open
+                        if prediction == 0:  # Mắt nhắm
+                            closed_eyes += 1
+                            cv2.putText(frame, "CLOSED", (x+ex, y+ey-10), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                        else:  # Mắt mở
+                            cv2.putText(frame, "OPEN", (x+ex, y+ey-10), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            
+            # Kiểm tra buồn ngủ
+            if total_eyes > 0 and closed_eyes >= total_eyes * 0.7:  # 70% mắt nhắm
+                self.frame_counter += 1
                 
-                # Display EAR value
-                cv2.putText(frame, f"EAR: {ear_value:.2f}", (300, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                
-                # Draw face bounding box
-                x_coords = [lm[0] for lm in landmarks]
-                y_coords = [lm[1] for lm in landmarks]
-                x, y, w, h = min(x_coords), min(y_coords), max(x_coords) - min(x_coords), max(y_coords) - min(y_coords)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+                if self.frame_counter >= self.CONSECUTIVE_FRAMES:
+                    drowsy_status = True
+                    self.drowsy_counter += 1
+                    
+                    # Hiển thị cảnh báo
+                    cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    
+                    if not self.alarm_playing:
+                        self.alarm_playing = True
+            else:
+                self.frame_counter = 0
+                self.alarm_playing = False
+            
+            # Hiển thị thông tin
+            cv2.putText(frame, f"Confidence: {confidence:.2f}", (10, 60),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            cv2.putText(frame, f"Closed: {closed_eyes}/{total_eyes}", (10, 80),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
         
-        return frame, drowsy_status, ear_value
+        return frame, drowsy_status, confidence

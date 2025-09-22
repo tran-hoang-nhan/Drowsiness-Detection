@@ -37,48 +37,23 @@ def download_dataset():
                 print(f"Kiểm tra: {item} - {os.path.isdir(src_path)}")
                 
                 if os.path.isdir(src_path):
-                    # Xử lý thư mục mrleyedataset
-                    if 'mrleyedataset' in item.lower():
-                        # Duyệt qua các thư mục con trong mrleyedataset
-                        for subdir in os.listdir(src_path):
-                            subdir_path = os.path.join(src_path, subdir)
-                            if os.path.isdir(subdir_path):
-                                files = os.listdir(subdir_path)
-                                print(f"Thư mục con {subdir} có {len(files)} files")
-                                
-                                for file in files:
-                                    src_file = os.path.join(subdir_path, file)
-                                    if 'open' in subdir.lower():
-                                        dst_file = os.path.join('data/eyes/open', file)
-                                    elif 'close' in subdir.lower():
-                                        dst_file = os.path.join('data/eyes/closed', file)
-                                    else:
-                                        continue
-                                    
-                                    try:
-                                        shutil.copy2(src_file, dst_file)
-                                        print(f"✅ Copy {file} -> {dst_file}")
-                                    except Exception as e:
-                                        print(f"❌ Lỗi copy {file}: {e}")
-                    else:
-                        # Xử lý thư mục thông thường
-                        files = os.listdir(src_path)
-                        print(f"Thư mục {item} có {len(files)} files")
+                    files = os.listdir(src_path)
+                    print(f"Thư mục {item} có {len(files)} files")
+                    
+                    for file in files:
+                        src_file = os.path.join(src_path, file)
+                        if 'open' in item.lower() or 'Open' in item:
+                            dst_file = os.path.join('data/eyes/open', file)
+                        elif 'closed' in item.lower() or 'Closed' in item:
+                            dst_file = os.path.join('data/eyes/closed', file)
+                        else:
+                            print(f"Bỏ qua thư mục: {item}")
+                            continue
                         
-                        for file in files:
-                            src_file = os.path.join(src_path, file)
-                            if 'open' in item.lower():
-                                dst_file = os.path.join('data/eyes/open', file)
-                            elif 'close' in item.lower():
-                                dst_file = os.path.join('data/eyes/closed', file)
-                            else:
-                                print(f"Bỏ qua thư mục: {item}")
-                                continue
-                            
-                            try:
-                                shutil.copy2(src_file, dst_file)
-                            except Exception as e:
-                                print(f"Lỗi copy {file}: {e}")
+                        try:
+                            shutil.copy2(src_file, dst_file)
+                        except Exception as e:
+                            print(f"Lỗi copy {file}: {e}")
                             
             print("✅ Đã copy dataset vào data/eyes/")
             return True
