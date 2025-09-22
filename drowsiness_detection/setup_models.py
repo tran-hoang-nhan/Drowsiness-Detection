@@ -28,22 +28,33 @@ def download_dataset():
         # Tải dataset
         path = kagglehub.dataset_download("imadeddinedjerarda/mrl-eye-dataset")
         print(f"✅ Đã tải dataset tại: {path}")
+        print(f"Nội dung thư mục: {os.listdir(path)}")
         
         # Copy vào data/eyes
         if os.path.exists(path):
             for item in os.listdir(path):
                 src_path = os.path.join(path, item)
+                print(f"Kiểm tra: {item} - {os.path.isdir(src_path)}")
+                
                 if os.path.isdir(src_path):
-                    # Copy tất cả file trong thư mục
-                    for file in os.listdir(src_path):
+                    files = os.listdir(src_path)
+                    print(f"Thư mục {item} có {len(files)} files")
+                    
+                    for file in files:
                         src_file = os.path.join(src_path, file)
                         if item == 'Open-Eyes':
                             dst_file = os.path.join('data/eyes/open', file)
                         elif item == 'Closed-Eyes':
                             dst_file = os.path.join('data/eyes/closed', file)
                         else:
+                            print(f"Bỏ qua thư mục: {item}")
                             continue
-                        shutil.copy2(src_file, dst_file)
+                        
+                        try:
+                            shutil.copy2(src_file, dst_file)
+                        except Exception as e:
+                            print(f"Lỗi copy {file}: {e}")
+                            
             print("✅ Đã copy dataset vào data/eyes/")
             return True
         
