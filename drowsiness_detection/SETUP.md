@@ -15,8 +15,8 @@ python setup_models.py
 ```
 
 ### 2. Tải MRL Eye Dataset
-1. Truy cập: https://www.kaggle.com/datasets/kutaykutlu/drowsiness-detection
-2. Tải file `mrlEyes_2018_01.zip`
+1. Truy cập: https://www.kaggle.com/datasets/imadeddinedjerarda/mrl-eye-dataset
+2. Tải file dataset
 3. Giải nén vào `data/raw/`
 4. Chạy: `python dataset.py`
 

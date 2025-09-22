@@ -26,7 +26,7 @@ def download_dataset():
         print("📥 Đang tải MRL Eye Dataset...")
         
         # Tải dataset
-        path = kagglehub.dataset_download("kutaykutlu/drowsiness-detection")
+        path = kagglehub.dataset_download("imadeddinedjerarda/mrl-eye-dataset")
         print(f"✅ Đã tải dataset tại: {path}")
         
         # Copy vào thư mục data/raw

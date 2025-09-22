@@ -108,6 +108,7 @@ drowsiness_detection/
 ## Dataset
 
 - **Source**: MRL Eye Dataset từ Kaggle
+- **Link**: https://www.kaggle.com/datasets/imadeddinedjerarda/mrl-eye-dataset
 - **Size**: 84,898 ảnh (42,952 open + 41,946 closed)
 - **Format**: Grayscale images, 32x32 pixels
 - **Quality**: High-quality eye images từ nhiều người khác nhau
