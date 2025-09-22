@@ -29,16 +29,18 @@ def download_dataset():
         path = kagglehub.dataset_download("imadeddinedjerarda/mrl-eye-dataset")
         print(f"✅ Đã tải dataset tại: {path}")
         
-        # Copy vào thư mục data/raw
+        # Organize vào data/eyes
         if os.path.exists(path):
             for item in os.listdir(path):
-                src = os.path.join(path, item)
-                dst = os.path.join('data/raw', item)
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(src, dst)
-            print("✅ Đã copy dataset vào data/raw/")
+                src_path = os.path.join(path, item)
+                if os.path.isdir(src_path):
+                    if 'open' in item.lower():
+                        dst_path = 'data/eyes/open'
+                        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+                    elif 'closed' in item.lower():
+                        dst_path = 'data/eyes/closed'
+                        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+            print("✅ Đã organize dataset vào data/eyes/")
             return True
         
     except ImportError:
@@ -54,8 +56,11 @@ def download_dataset():
 
 def check_dataset():
     """Kiểm tra MRL Eye Dataset"""
-    dataset_path = 'data/raw'
-    if not os.path.exists(dataset_path) or not os.listdir(dataset_path):
+    open_path = 'data/eyes/open'
+    closed_path = 'data/eyes/closed'
+    
+    if (not os.path.exists(open_path) or not os.listdir(open_path) or 
+        not os.path.exists(closed_path) or not os.listdir(closed_path)):
         print("⚠️ MRL Eye Dataset chưa có!")
         return download_dataset()
     else:
