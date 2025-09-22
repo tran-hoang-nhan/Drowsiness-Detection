@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Setup script cho MRL Eye Dataset
+Setup script cho MRL Eye Dataset với kagglehub
 """
 import os
+import shutil
 
 def create_directories():
     """Tạo cấu trúc thư mục cho MRL Eye Dataset"""
@@ -18,17 +19,45 @@ def create_directories():
     
     print("✅ Đã tạo cấu trúc thư mục")
 
+def download_dataset():
+    """Tải MRL Eye Dataset bằng kagglehub"""
+    try:
+        import kagglehub
+        print("📥 Đang tải MRL Eye Dataset...")
+        
+        # Tải dataset
+        path = kagglehub.dataset_download("kutaykutlu/drowsiness-detection")
+        print(f"✅ Đã tải dataset tại: {path}")
+        
+        # Copy vào thư mục data/raw
+        if os.path.exists(path):
+            for item in os.listdir(path):
+                src = os.path.join(path, item)
+                dst = os.path.join('data/raw', item)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, dst)
+            print("✅ Đã copy dataset vào data/raw/")
+            return True
+        
+    except ImportError:
+        print("❌ kagglehub chưa được cài đặt!")
+        print("Chạy: pip install kagglehub")
+        return False
+    except Exception as e:
+        print(f"❌ Lỗi tải dataset: {e}")
+        print("📋 Cách khắc phục:")
+        print("   1. Đăng nhập Kaggle: kagglehub.login()")
+        print("   2. Hoặc tải thủ công từ Kaggle")
+        return False
+
 def check_dataset():
     """Kiểm tra MRL Eye Dataset"""
     dataset_path = 'data/raw'
     if not os.path.exists(dataset_path) or not os.listdir(dataset_path):
         print("⚠️ MRL Eye Dataset chưa có!")
-        print("📋 Hướng dẫn tải dataset:")
-        print("   1. Truy cập: https://www.kaggle.com/datasets/kutaykutlu/drowsiness-detection")
-        print("   2. Tải file mrlEyes_2018_01.zip")
-        print("   3. Giải nén vào thư mục data/raw/")
-        print("   4. Chạy: python dataset.py để organize dataset")
-        return False
+        return download_dataset()
     else:
         print("✅ Dataset đã có sẵn")
         return True
