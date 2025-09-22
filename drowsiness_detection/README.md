@@ -26,7 +26,12 @@ cd d:\XLA\drowsiness_detection
 pip install -r requirements.txt
 ```
 
-### 3. Chạy ứng dụng chính
+### 3. Setup models
+```bash
+python setup_models.py
+```
+
+### 4. Chạy ứng dụng chính
 ```bash
 python app.py
 ```
