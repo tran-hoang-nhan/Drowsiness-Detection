@@ -3,7 +3,7 @@ from flask_socketio import SocketIO, emit
 import cv2
 import numpy as np
 # import tensorflow as tf  # Not needed for simple version
-from utils.trained_detector import TrainedDrowsinessDetector
+from utils.drowsiness_detector import DrowsinessDetector
 import base64
 import threading
 import time
@@ -13,7 +13,7 @@ app.config['SECRET_KEY'] = 'drowsiness_detection_secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global variables
-detector = TrainedDrowsinessDetector()
+detector = DrowsinessDetector()
 camera = None
 detection_active = False
 
@@ -29,36 +29,51 @@ def generate_frames():
     global camera, detection_active
     camera = cv2.VideoCapture(0)
     
-    while detection_active:
-        success, frame = camera.read()
-        if not success:
-            break
-        
-        # Detect drowsiness
-        result_frame, drowsy_status, ear_value = detector.detect(frame)
-        
-        # Encode frame
-        ret, buffer = cv2.imencode('.jpg', result_frame)
-        frame_bytes = buffer.tobytes()
-        
-        # Emit status to frontend + âm thanh
-        socketio.emit('status_update', {
-            'drowsy': drowsy_status,
-            'ear_value': float(ear_value),
-            'timestamp': time.time()
-        })
-        
-        # Âm thanh cảnh báo qua web
-        if drowsy_status:
-            socketio.emit('play_alarm', {'sound': True})
-        
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        
-        time.sleep(0.1)
+    # Cài đặt camera
+    camera.set(cv2.CAP_PROP_FPS, 30)  # Giữ 30 FPS ổn định
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
-    if camera:
-        camera.release()
+    try:
+        while detection_active:
+            success, frame = camera.read()
+            if not success:
+                break
+            
+            # Detect drowsiness
+            result_frame, drowsy_status, ear_value = detector.detect(frame)
+            
+            # Encode frame
+            ret, buffer = cv2.imencode('.jpg', result_frame)
+            frame_bytes = buffer.tobytes()
+            
+            # Emit status to frontend (xử lý lỗi)
+            try:
+                socketio.emit('status_update', {
+                    'drowsy': drowsy_status,
+                    'ear_value': float(ear_value),
+                    'timestamp': time.time()
+                })
+                
+                # Âm thanh cảnh báo qua web
+                if drowsy_status:
+                    socketio.emit('play_alarm', {'sound': True})
+            except:
+                pass  # Bỏ qua lỗi emit
+            
+            try:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            except:
+                break  # Dừng khi connection bị ngắt
+            
+            time.sleep(0.033)  # ~30 FPS
+            
+    except Exception as e:
+        print(f"Camera error: {e}")
+    finally:
+        if camera:
+            camera.release()
 
 @app.route('/video_feed')
 def video_feed():
