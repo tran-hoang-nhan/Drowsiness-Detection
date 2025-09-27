@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 import pickle
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from utils.feature_extractor import extract_eye_features
 
 class AdvancedEyeStateClassifier:
     def __init__(self):
@@ -38,74 +39,7 @@ class AdvancedEyeStateClassifier:
         self.best_accuracy = 0
         self.best_pipeline_name = ""
         
-    def extract_advanced_features(self, image):
-        """Advanced feature extraction for eye state classification"""
-        if image is None or image.size == 0:
-            return np.zeros(25)
-        
-        # Standardize image size
-        image = cv2.resize(image, (32, 32))
-        features = []
-        
-        # === STATISTICAL FEATURES ===
-        features.extend([
-            np.mean(image),
-            np.std(image),
-            np.var(image),
-            np.min(image),
-            np.max(image),
-            np.median(image)
-        ])
-        
-        # === TEXTURE FEATURES ===
-        # Local Binary Pattern inspired
-        center = image[12:20, 12:20]
-        features.extend([
-            np.mean(center),
-            np.std(center),
-            np.mean(center) - np.mean(image)  # Center vs periphery contrast
-        ])
-        
-        # === EDGE AND GRADIENT FEATURES ===
-        # Canny edges
-        edges = cv2.Canny(image, 30, 100)
-        features.append(np.sum(edges) / (32 * 32))
-        
-        # Sobel gradients
-        grad_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
-        
-        features.extend([
-            np.mean(np.abs(grad_x)),
-            np.mean(np.abs(grad_y)),
-            np.std(grad_x),
-            np.std(grad_y)
-        ])
-        
-        # === MORPHOLOGICAL FEATURES ===
-        # Opening and closing operations
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        opened = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
-        closed = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
-        
-        features.extend([
-            np.mean(opened),
-            np.mean(closed),
-            np.mean(image - opened),  # Top-hat
-            np.mean(closed - image)   # Black-hat
-        ])
-        
-        # === HISTOGRAM FEATURES ===
-        hist = cv2.calcHist([image], [0], None, [8], [0, 256])
-        features.extend(hist.flatten())
-        
-        # === SYMMETRY FEATURE ===
-        left_half = image[:, :16]
-        right_half = cv2.flip(image[:, 16:], 1)
-        correlation = np.corrcoef(left_half.flatten(), right_half.flatten())[0, 1]
-        features.append(correlation if not np.isnan(correlation) else 0)
-        
-        return np.array(features)
+
     
     def load_dataset(self, data_path='data/eyes'):
         """Load and preprocess dataset with advanced feature extraction"""
@@ -123,7 +57,7 @@ class AdvancedEyeStateClassifier:
                 img_path = os.path.join(open_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None and img.size > 0:
-                    features = self.extract_advanced_features(img)
+                    features = extract_eye_features(img)
                     if not np.any(np.isnan(features)):
                         X.append(features)
                         y.append(1)
@@ -138,7 +72,7 @@ class AdvancedEyeStateClassifier:
                 img_path = os.path.join(closed_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None and img.size > 0:
-                    features = self.extract_advanced_features(img)
+                    features = extract_eye_features(img)
                     if not np.any(np.isnan(features)):
                         X.append(features)
                         y.append(0)

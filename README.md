@@ -63,11 +63,6 @@ data/eyes/
 python train.py
 ```
 
-#### Deep Learning Approach  
-```bash
-python train_cnn.py
-```
-
 #### Analysis và Comparison
 ```bash
 jupyter notebook analysis.ipynb
