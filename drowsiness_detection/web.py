@@ -1,11 +1,12 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Tắt TensorFlow warnings
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Tắt oneDNN messages
+
 from flask import Flask, render_template, Response, jsonify
 from flask_socketio import SocketIO, emit
 import cv2
 import numpy as np
-# import tensorflow as tf  # Not needed for simple version
 from utils.drowsiness_detector import DrowsinessDetector
-import base64
-import threading
 import time
 
 app = Flask(__name__)
