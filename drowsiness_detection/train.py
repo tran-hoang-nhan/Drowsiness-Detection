@@ -51,9 +51,9 @@ class AdvancedEyeStateClassifier:
         open_path = os.path.join(data_path, 'open')
         if os.path.exists(open_path):
             open_files = [f for f in os.listdir(open_path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
-            print(f"   Processing {len(open_files)} open eye images...")
-            
-            for img_name in tqdm(open_files, desc="Open eyes"):
+
+            # In thông tin và bắt đầu progress bar ngay lập tức
+            for img_name in tqdm(open_files, desc=f"Processing {len(open_files)} open eye images"):
                 img_path = os.path.join(open_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None and img.size > 0:
@@ -66,9 +66,9 @@ class AdvancedEyeStateClassifier:
         closed_path = os.path.join(data_path, 'closed')
         if os.path.exists(closed_path):
             closed_files = [f for f in os.listdir(closed_path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
-            print(f"   Processing {len(closed_files)} closed eye images...")
-            
-            for img_name in tqdm(closed_files, desc="Closed eyes"):
+
+            # Tương tự cho closed eyes
+            for img_name in tqdm(closed_files, desc=f"Processing {len(closed_files)} closed eye images"):
                 img_path = os.path.join(closed_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None and img.size > 0:
@@ -80,7 +80,7 @@ class AdvancedEyeStateClassifier:
         return np.array(X), np.array(y)
     
     def train_models_with_cv(self, X, y):
-        """Train pipelines"""
+        """Train pipelines with optimized strategy for best accuracy"""
         print("\n🚀 Pipeline Training...")
         
         X_train, X_test, y_train, y_test = train_test_split(
@@ -89,32 +89,115 @@ class AdvancedEyeStateClassifier:
         
         results = {}
         
-        for name, pipeline in tqdm(self.pipelines.items(), desc="Training pipelines"):
-            print(f"\n🤖 Training {name}...")
-            
+        # Strategy 1: Quick screening of all models
+        print("🔍 Quick model screening...")
+        for name, pipeline in tqdm(self.pipelines.items(), desc="Screening models"):
             cv_scores = cross_val_score(pipeline, X_train, y_train, cv=3, scoring='accuracy')
-            pipeline.fit(X_train, y_train)
-            y_pred = pipeline.predict(X_test)
+            results[name] = {
+                'cv_mean': cv_scores.mean(),
+                'cv_std': cv_scores.std()
+            }
+            print(f"   {name}: {cv_scores.mean():.4f} (±{cv_scores.std():.4f})")
+
+        # Strategy 2: Focus on top 2 performers with hyperparameter tuning
+        sorted_models = sorted(results.items(), key=lambda x: x[1]['cv_mean'], reverse=True)
+        top_models = [model[0] for model in sorted_models[:2]]
+
+        print(f"\n🎯 Optimizing top models: {', '.join(top_models)}")
+
+        final_results = {}
+
+        for name in top_models:
+            print(f"\n🤖 Optimizing {name}...")
+
+            # Hyperparameter tuning for top models
+            if name == 'random_forest':
+                param_grid = {
+                    'classifier__n_estimators': [100, 200],
+                    'classifier__max_depth': [10, 20, None],
+                    'classifier__min_samples_split': [2, 5]
+                }
+            elif name == 'gradient_boosting':
+                param_grid = {
+                    'classifier__n_estimators': [50, 100],
+                    'classifier__learning_rate': [0.1, 0.2],
+                    'classifier__max_depth': [3, 5]
+                }
+            elif name == 'svm':
+                param_grid = {
+                    'classifier__C': [1, 10],
+                    'classifier__gamma': ['scale', 'auto']
+                }
+            else:  # logistic
+                param_grid = {
+                    'classifier__C': [1, 10],
+                    'classifier__solver': ['liblinear', 'lbfgs']
+                }
+
+            # GridSearchCV with limited scope for speed
+            grid_search = GridSearchCV(
+                self.pipelines[name],
+                param_grid,
+                cv=3,
+                scoring='accuracy',
+                n_jobs=-1
+            )
+
+            grid_search.fit(X_train, y_train)
+            best_pipeline = grid_search.best_estimator_
+
+            # Evaluate on test set
+            y_pred = best_pipeline.predict(X_test)
             accuracy = accuracy_score(y_test, y_pred)
             
-            results[name] = {
-                'pipeline': pipeline,
+            final_results[name] = {
+                'pipeline': best_pipeline,
                 'accuracy': accuracy,
-                'cv_mean': cv_scores.mean(),
+                'cv_mean': grid_search.best_score_,
+                'best_params': grid_search.best_params_,
                 'y_test': y_test,
                 'y_pred': y_pred
             }
             
+            print(f"   Best params: {grid_search.best_params_}")
             print(f"   Accuracy: {accuracy:.4f}")
-            print(f"   CV Score: {cv_scores.mean():.4f} (±{cv_scores.std():.4f})")
-            
+            print(f"   CV Score: {grid_search.best_score_:.4f}")
+
             if accuracy > self.best_accuracy:
                 self.best_accuracy = accuracy
-                self.best_pipeline = pipeline
+                self.best_pipeline = best_pipeline
                 self.best_pipeline_name = name
         
-        return results
-    
+        # Strategy 3: Create ensemble of top models if both perform well
+        if len(final_results) >= 2:
+            accuracies = [result['accuracy'] for result in final_results.values()]
+            if min(accuracies) >= 0.95:  # Both models are good
+                print("\n🏆 Creating ensemble classifier...")
+
+                estimators = [(name, result['pipeline']) for name, result in final_results.items()]
+                ensemble = VotingClassifier(estimators=estimators, voting='soft')
+                ensemble.fit(X_train, y_train)
+
+                y_pred_ensemble = ensemble.predict(X_test)
+                ensemble_accuracy = accuracy_score(y_test, y_pred_ensemble)
+
+                print(f"   Ensemble accuracy: {ensemble_accuracy:.4f}")
+
+                if ensemble_accuracy > self.best_accuracy:
+                    self.best_accuracy = ensemble_accuracy
+                    self.best_pipeline = ensemble
+                    self.best_pipeline_name = "ensemble"
+
+                    final_results['ensemble'] = {
+                        'pipeline': ensemble,
+                        'accuracy': ensemble_accuracy,
+                        'cv_mean': ensemble_accuracy,
+                        'y_test': y_test,
+                        'y_pred': y_pred_ensemble
+                    }
+
+        return final_results
+
     def plot_results(self, results):
         """Visualize training results"""
         try:
@@ -174,36 +257,54 @@ class AdvancedEyeStateClassifier:
         print(f"💾 Pipeline saved: models/eye_classifier.pkl")
 
 def main():
-    print("🤖 Eye State Classifier Training")
-    print("=" * 40)
-    
+    """Main training workflow"""
+    print("🎯 Advanced Eye State Classifier Training")
+    print("="*50)
+
+    # Initialize classifier
     classifier = AdvancedEyeStateClassifier()
     
-    data_path = 'data/eyes'
-    X, y = classifier.load_dataset(data_path)
-    
+    # Load and preprocess dataset
+    print("\n📂 Loading dataset...")
+    X, y = classifier.load_dataset()
+
     if len(X) == 0:
-        print("❌ No dataset found!")
+        print("❌ No valid data found! Please check:")
+        print("   - data/eyes/open/ folder exists and contains images")
+        print("   - data/eyes/closed/ folder exists and contains images")
         return
     
-    print(f"\n📊 Dataset Info:")
-    print(f"   Total samples: {len(X):,}")
-    print(f"   Open eyes: {np.sum(y):,} ({np.sum(y)/len(y)*100:.1f}%)")
-    print(f"   Closed eyes: {len(y) - np.sum(y):,} ({(len(y) - np.sum(y))/len(y)*100:.1f}%)")
-    print(f"   Features per sample: {X.shape[1]}")
-    
+    print(f"✅ Dataset loaded: {len(X)} samples")
+    print(f"   Features per sample: {X.shape[1] if len(X.shape) > 1 else 'Unknown'}")
+    print(f"   Open eyes: {np.sum(y == 1)}")
+    print(f"   Closed eyes: {np.sum(y == 0)}")
+
+    # Train models
     results = classifier.train_models_with_cv(X, y)
     
-    print(f"\n📈 Results:")
-    for name, result in results.items():
-        print(f"   {name:15} | Accuracy: {result['accuracy']:.4f}")
-    
+    # Display results
+    print(f"\n🏆 Best Model: {classifier.best_pipeline_name}")
+    print(f"   Accuracy: {classifier.best_accuracy:.4f}")
+
+    # Generate detailed report for best model
+    best_result = results[classifier.best_pipeline_name]
+    print(f"\n📊 Detailed Report for {classifier.best_pipeline_name}:")
+    print(classification_report(
+        best_result['y_test'],
+        best_result['y_pred'],
+        target_names=['Closed', 'Open']
+    ))
+
+    # Plot and save results
     classifier.plot_results(results)
+
+    # Save the best model
     classifier.save_model()
     
-    print(f"\n✅ Training Completed!")
-    print(f"🏆 Best pipeline: {classifier.best_pipeline_name}")
-    print(f"📊 Best accuracy: {classifier.best_accuracy:.4f}")
+    print("\n✅ Training completed successfully!")
+    print("📁 Files saved:")
+    print("   - models/eye_classifier.pkl (trained model)")
+    print("   - models/training_results.png (visualization)")
 
 if __name__ == "__main__":
     main()
