@@ -11,7 +11,7 @@ from sklearn.pipeline import Pipeline
 import pickle
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from utils.feature_extractor import extract_eye_features
+from utils.feature_extractor import extract_eye_features, preprocess_eye_image
 
 class AdvancedEyeStateClassifier:
     def __init__(self):
@@ -42,21 +42,24 @@ class AdvancedEyeStateClassifier:
 
     
     def load_dataset(self, data_path='data/eyes'):
-        """Load and preprocess dataset with advanced feature extraction"""
+        """Load, preprocess and extract features from dataset"""
         X, y = [], []
         
-        print("📂 Loading dataset with advanced features...")
-        
+        print("📂 Loading dataset with preprocessing + feature extraction...")
+
         # Load open eyes (label = 1)
         open_path = os.path.join(data_path, 'open')
         if os.path.exists(open_path):
             open_files = [f for f in os.listdir(open_path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
 
-            # In thông tin và bắt đầu progress bar ngay lập tức
             for img_name in tqdm(open_files, desc=f"Processing {len(open_files)} open eye images"):
                 img_path = os.path.join(open_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None and img.size > 0:
+                    # PREPROCESSING
+                    img = preprocess_eye_image(img)
+
+                    # FEATURE EXTRACTION
                     features = extract_eye_features(img)
                     if not np.any(np.isnan(features)):
                         X.append(features)
@@ -67,11 +70,14 @@ class AdvancedEyeStateClassifier:
         if os.path.exists(closed_path):
             closed_files = [f for f in os.listdir(closed_path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
 
-            # Tương tự cho closed eyes
             for img_name in tqdm(closed_files, desc=f"Processing {len(closed_files)} closed eye images"):
                 img_path = os.path.join(closed_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None and img.size > 0:
+                    # ✅ BƯỚC 1: PREPROCESSING
+                    img = preprocess_eye_image(img)
+
+                    # ✅ BƯỚC 2: FEATURE EXTRACTION
                     features = extract_eye_features(img)
                     if not np.any(np.isnan(features)):
                         X.append(features)
@@ -167,7 +173,7 @@ class AdvancedEyeStateClassifier:
                 self.best_accuracy = accuracy
                 self.best_pipeline = best_pipeline
                 self.best_pipeline_name = name
-        
+
         # Strategy 3: Create ensemble of top models if both perform well
         if len(final_results) >= 2:
             accuracies = [result['accuracy'] for result in final_results.values()]

@@ -10,23 +10,33 @@ class EARCalculator:
         pass
     
     def calculate_mtcnn_ear(self, left_eye, right_eye, nose):
-
-        eye_distance = dist.euclidean(left_eye, right_eye)
-        if eye_distance == 0:
-            return 0.1
+        """
+        Calculate Eye Aspect Ratio (EAR) using MTCNN keypoints
+        Formula: EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)
         
-        left_to_nose = dist.euclidean(left_eye, nose)
-        right_to_nose = dist.euclidean(right_eye, nose)
-        avg_eye_nose_dist = (left_to_nose + right_to_nose) / 2
-        
-        ear = avg_eye_nose_dist / eye_distance
-        
-        if ear > 0.8:
-            return 0.3
-        elif ear < 0.4:
-            return 0.1
-        else:
-            return 0.2
+        MTCNN keypoints: {'left_eye', 'right_eye', 'nose', 'mouth_left', 'mouth_right'}
+        For approximation without full landmarks, we use eye-to-nose distance
+        """
+        try:
+            eye_distance = dist.euclidean(left_eye, right_eye)
+            if eye_distance == 0:
+                return 0.0
+            
+            # Distance from each eye to nose (approximation of vertical eye height)
+            left_to_nose = dist.euclidean(left_eye, nose)
+            right_to_nose = dist.euclidean(right_eye, nose)
+            avg_vertical_dist = (left_to_nose + right_to_nose) / 2
+            
+            # EAR approximation
+            ear = avg_vertical_dist / eye_distance
+            
+            # Normalize to 0-1 range for consistency
+            # Typical range: 0.05 (closed) to 0.35 (open)
+            ear_normalized = np.clip(ear / 0.4, 0, 1)
+            
+            return ear_normalized
+        except:
+            return 0.0
     
     def calculate_haar_ear(self, left_eye, right_eye):
         """Calculate EAR from Haar eye regions"""

@@ -1,90 +1,192 @@
-"""
-Main Drowsiness Detector - Tích hợp tất cả modules
-"""
 import cv2
-import numpy as np
+import pickle
+import os
 from .face_detectors import FaceDetector
-from .ear_calculator import EARCalculator
 from .ml_predictor import MLPredictor
-from .alert_system import AlertSystem
-from .visualizer import Visualizer
+from .feature_extractor import extract_eye_features, calculate_ear_from_dlib_landmarks, calculate_ear_from_keypoints
 
 class DrowsinessDetector:
     def __init__(self):
-        print("🚀 Initializing Drowsiness Detection System...")
-        
-        # Initialize all components
         self.face_detector = FaceDetector()
-        self.ear_calculator = EARCalculator()
         self.ml_predictor = MLPredictor()
-        self.alert_system = AlertSystem()
-        self.visualizer = Visualizer()
+
+        # Detection parameters
+        self.EAR_THRESHOLD = 0.2  # dlib EAR threshold (0.2 = mắt đóng)
+        self.ML_THRESHOLD = 0.5   # ML confidence threshold (> 0.5 = closed eyes)
+        self.CONSECUTIVE_FRAMES = 10
+        self.frame_counter = 0
+        self.alarm_playing = False
         
-        print("✅ System ready!")
+        # EAR smoothing history (lọc nhiễu)
+        self.ear_history = []
+        self.ear_history_size = 3
+
+        # Sound system
+        try:
+            import winsound
+            self.winsound = winsound
+        except ImportError:
+            self.winsound = None
+    
+    def extract_eye_region(self, gray, x, y, size=30):
+        """Extract eye region from coordinates"""
+        if gray is None:
+            return None
+        try:
+            padding = 10
+            x1 = max(0, int(x) - padding)
+            y1 = max(0, int(y) - padding)
+            x2 = min(gray.shape[1], int(x) + size + padding)
+            y2 = min(gray.shape[0], int(y) + size + padding)
+
+            region = gray[y1:y2, x1:x2]
+            return region if region.size > 0 else None
+        except:
+            return None
     
     def detect(self, frame):
-        """Main detection pipeline"""
+        """Main detection pipeline với kết hợp EAR (Dlib) + ML Confidence"""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # 1. Detect face
-        detection_result = self.face_detector.detect(frame)
-        
-        ear_value = 0.0
-        ml_confidence = 0.0
-        method = "None"
-        
-        if detection_result:
-            method = detection_result['method']
-            
-            # 2. Calculate EAR
-            if method == 'MTCNN':
-                keypoints = detection_result['keypoints']
-                ear_value = self.ear_calculator.calculate_mtcnn_ear(
-                    keypoints['left_eye'], keypoints['right_eye'], keypoints['nose']
+
+        # Detect face and get dlib landmarks
+        detection = self.face_detector.detect(frame)
+        method = "Unknown"
+        ear_value = 0.5  # Default: unknown state
+        ml_confidence = 0.5
+        eyes_detected = False
+
+        if detection:
+            # ===== PRIMARY: dlib Landmarks (Most Accurate) =====
+            if 'dlib_landmarks' in detection:
+                landmarks = detection['dlib_landmarks']
+
+                # Calculate precise EAR from 68-point landmarks
+                ear_value = calculate_ear_from_dlib_landmarks(landmarks)
+                eyes_detected = True
+                method = "dlib EAR"
+
+                # Get eye region coordinates for ML prediction
+                # Left eye center: average of landmarks 36-41
+                left_eye_points = [landmarks[i] for i in range(36, 42)]
+                left_eye_center = (
+                    int(sum(p[0] for p in left_eye_points) / 6),
+                    int(sum(p[1] for p in left_eye_points) / 6)
                 )
-                
-                # 3. ML prediction
-                left_region = self.ear_calculator.extract_eye_region(gray, keypoints['left_eye'])
-                right_region = self.ear_calculator.extract_eye_region(gray, keypoints['right_eye'])
-                
-                left_pred = self.ml_predictor.predict_eye_state(left_region)
-                right_pred = self.ml_predictor.predict_eye_state(right_region)
-                
-                if left_pred is not None and right_pred is not None:
+
+                # Right eye center: average of landmarks 42-47
+                right_eye_points = [landmarks[i] for i in range(42, 48)]
+                right_eye_center = (
+                    int(sum(p[0] for p in right_eye_points) / 6),
+                    int(sum(p[1] for p in right_eye_points) / 6)
+                )
+
+                # Get ML predictions for confidence
+                left_region = self.extract_eye_region(gray, left_eye_center[0], left_eye_center[1])
+                right_region = self.extract_eye_region(gray, right_eye_center[0], right_eye_center[1])
+
+                left_pred = self.ml_predictor.predict_eye_state(left_region) or 0.5
+                right_pred = self.ml_predictor.predict_eye_state(right_region) or 0.5
+                ml_confidence = (left_pred + right_pred) / 2.0
+
+                # Draw face box
+                if 'box' in detection:
+                    x, y, w, h = detection['box']
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+                # Draw 68 landmarks on face
+                for i, (px, py) in landmarks.items():
+                    # Eye landmarks in red
+                    if 36 <= i <= 47:
+                        cv2.circle(frame, (px, py), 3, (0, 0, 255), -1)
+                    # Other landmarks in yellow
+                    else:
+                        cv2.circle(frame, (px, py), 2, (0, 255, 255), -1)
+
+            # ===== FALLBACK: MTCNN Keypoints =====
+            elif 'keypoints' in detection:
+                keypoints = detection['keypoints']
+                if 'left_eye' in keypoints and 'right_eye' in keypoints and 'nose' in keypoints:
+                    left_eye = keypoints['left_eye']
+                    right_eye = keypoints['right_eye']
+                    nose = keypoints['nose']
+                    
+                    ear_value = calculate_ear_from_keypoints(left_eye, right_eye, nose)
+                    eyes_detected = True
+                    method = "MTCNN EAR (fallback)"
+
+                    # Get ML predictions
+                    left_region = self.extract_eye_region(gray, left_eye[0], left_eye[1])
+                    right_region = self.extract_eye_region(gray, right_eye[0], right_eye[1])
+                    
+                    left_pred = self.ml_predictor.predict_eye_state(left_region) or 0.5
+                    right_pred = self.ml_predictor.predict_eye_state(right_region) or 0.5
                     ml_confidence = (left_pred + right_pred) / 2.0
-                else:
-                    # Backup pixel analysis
-                    left_pixel = self.ear_calculator.analyze_eye_pixels(left_region)
-                    right_pixel = self.ear_calculator.analyze_eye_pixels(right_region)
-                    ml_confidence = (left_pixel + right_pixel) / 2.0
-                    
-            elif method == 'Haar':
-                eyes = detection_result['eyes']
-                if len(eyes) >= 2:
-                    ear_value = self.ear_calculator.calculate_haar_ear(eyes[0], eyes[-1])
-                    
-                    # ML prediction for Haar
-                    box = detection_result['box']
-                    x, y, w, h = box
-                    roi_gray = gray[y:y+h, x:x+w]
-                    
-                    left_roi = roi_gray[eyes[0][1]:eyes[0][1]+eyes[0][3], eyes[0][0]:eyes[0][0]+eyes[0][2]]
-                    right_roi = roi_gray[eyes[-1][1]:eyes[-1][1]+eyes[-1][3], eyes[-1][0]:eyes[-1][0]+eyes[-1][2]]
-                    
-                    left_pred = self.ml_predictor.predict_eye_state(left_roi)
-                    right_pred = self.ml_predictor.predict_eye_state(right_roi)
-                    
-                    if left_pred is not None and right_pred is not None:
-                        ml_confidence = (left_pred + right_pred) / 2.0
-            
-            # 4. Draw visualization
-            self.visualizer.draw_face_detection(frame, detection_result)
+
+                    # Draw face box and keypoints
+                    if 'box' in detection:
+                        x, y, w, h = detection['box']
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+                    for key in ['left_eye', 'right_eye', 'nose']:
+                        if key in keypoints:
+                            pt = keypoints[key]
+                            cv2.circle(frame, tuple(map(int, pt)), 4, (0, 255, 255), -1)
+
+        # ===== DROWSINESS DETECTION LOGIC: EAR + ML CONFIDENCE COMBINED =====
+        drowsy_status = False
         
-        # 5. Process alert
-        drowsy_status, drowsy_indicators = self.alert_system.process_frame(ear_value, ml_confidence)
+        if eyes_detected:
+            # Smoothing EAR: lấy trung bình 3 frame gần nhất để chống nhiễu
+            self.ear_history.append(ear_value)
+            if len(self.ear_history) > self.ear_history_size:
+                self.ear_history.pop(0)
+
+            smoothed_ear = sum(self.ear_history) / len(self.ear_history)
+
+            # Kết hợp EAR + ML Confidence: tính weighted score
+            # - EAR < threshold: mắt đóng (EAR thấp = mắt đóng)
+            # - ML confidence > threshold: model nhận diện mắt đóng
+            ear_score = 1.0 if smoothed_ear < self.EAR_THRESHOLD else 0.0
+            ml_score = 1.0 if ml_confidence > self.ML_THRESHOLD else 0.0
+
+            # Weighted combination: 70% EAR (chính xác hơn từ 68 landmarks) + 30% ML
+            combined_score = ear_score * 0.7 + ml_score * 0.3
+
+            # Nếu combined score >= 0.5, tính là mắt đóng
+            if combined_score >= 0.5:
+                self.frame_counter += 1
+            else:
+                self.frame_counter = 0
+        else:
+            self.frame_counter = 0
+
+        # Trigger alert if consecutive closed eye frames exceed threshold
+        if self.frame_counter >= self.CONSECUTIVE_FRAMES:
+            drowsy_status = True
+            if not self.alarm_playing:
+                print("🚨 DROWSINESS ALERT!")
+                if self.winsound:
+                    try:
+                        self.winsound.Beep(1000, 500)
+                    except:
+                        pass
+                self.alarm_playing = True
+        else:
+            self.alarm_playing = False
         
-        # 6. Draw metrics
-        self.visualizer.draw_metrics(frame, ear_value, ml_confidence, drowsy_indicators, method, self.alert_system)
+        # ===== DRAW INFORMATION ON FRAME =====
+        # Status color: Green=Open, Red=Closed/Drowsy
+        status_color = (0, 255, 0) if ear_value >= self.EAR_THRESHOLD else (0, 0, 255)
         
+        cv2.putText(frame, f"Method: {method} | EAR: {ear_value:.3f}", 
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        cv2.putText(frame, f"Frames Closed: {self.frame_counter}/{self.CONSECUTIVE_FRAMES}", 
+                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+        cv2.putText(frame, f"ML Confidence: {ml_confidence:.3f} | EAR: {ear_value:.3f}",
+                   (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+        if drowsy_status:
+            cv2.putText(frame, "DROWSINESS DETECTED!", (10, 120),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+
         return frame, drowsy_status, ear_value
-    

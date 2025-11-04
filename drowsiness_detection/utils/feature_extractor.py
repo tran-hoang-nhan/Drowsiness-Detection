@@ -1,5 +1,70 @@
 import cv2
 import numpy as np
+from scipy.spatial import distance as dist
+
+def calculate_ear_from_dlib_landmarks(landmarks):
+    """
+    Calculate Eye Aspect Ratio (EAR) using dlib 68-point facial landmarks
+
+    dlib landmarks indices:
+    Left eye:  36-41 (6 points)
+    Right eye: 42-47 (6 points)
+
+    EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)
+    where p1 is left corner, p4 is right corner, p2,p3,p5,p6 are top/bottom points
+
+    Returns normalized EAR (0.0 = closed, 1.0 = fully open)
+    """
+    try:
+        # Left eye landmarks (indices 36-41)
+        left_eye = [landmarks[i] for i in range(36, 42)]
+
+        # Right eye landmarks (indices 42-47)
+        right_eye = [landmarks[i] for i in range(42, 48)]
+
+        # Calculate EAR for left eye
+        # Distance between vertical points (p2-p6, p3-p5)
+        left_vertical_1 = dist.euclidean(left_eye[1], left_eye[5])
+        left_vertical_2 = dist.euclidean(left_eye[2], left_eye[4])
+        # Distance between horizontal points (p1-p4)
+        left_horizontal = dist.euclidean(left_eye[0], left_eye[3])
+
+        left_ear = (left_vertical_1 + left_vertical_2) / (2.0 * left_horizontal)
+
+        # Calculate EAR for right eye
+        right_vertical_1 = dist.euclidean(right_eye[1], right_eye[5])
+        right_vertical_2 = dist.euclidean(right_eye[2], right_eye[4])
+        right_horizontal = dist.euclidean(right_eye[0], right_eye[3])
+
+        right_ear = (right_vertical_1 + right_vertical_2) / (2.0 * right_horizontal)
+
+        # Average both eyes
+        ear = (left_ear + right_ear) / 2.0
+
+        return ear
+    except:
+        return 0.0
+
+def calculate_ear_from_keypoints(left_eye, right_eye, nose):
+    """
+    Calculate Eye Aspect Ratio (EAR) from MTCNN keypoints (fallback method)
+    Returns normalized EAR value (0.0 = closed, 1.0 = fully open)
+    """
+    try:
+        eye_distance = dist.euclidean(left_eye, right_eye)
+        if eye_distance == 0:
+            return 0.0
+        
+        left_to_nose = dist.euclidean(left_eye, nose)
+        right_to_nose = dist.euclidean(right_eye, nose)
+        avg_vertical_dist = (left_to_nose + right_to_nose) / 2
+        
+        ear = avg_vertical_dist / eye_distance
+        ear_normalized = np.clip(ear / 0.4, 0, 1)
+        
+        return ear_normalized
+    except:
+        return 0.0
 
 def extract_eye_features(image):
     """Extract 25 advanced features from eye region"""
@@ -43,15 +108,9 @@ def extract_eye_features(image):
         np.mean(image - opened), np.mean(closed - image)
     ])
 
-    # Histogram features (8)
-    hist = cv2.calcHist([image], [0], None, [8], [0, 256])
+    # Histogram features (7)
+    hist = cv2.calcHist([image], [0], None, [7], [0, 256])
     features.extend(hist.flatten())
-
-    # Symmetry feature (1)
-    left_half = image[:, :16]
-    right_half = cv2.flip(image[:, 16:], 1)
-    correlation = np.corrcoef(left_half.flatten(), right_half.flatten())[0, 1]
-    features.append(correlation if not np.isnan(correlation) else 0)
 
     return np.array(features)
 
@@ -84,8 +143,7 @@ def analyze_eye_features(image):
         'edge_density',                                 # Edge (1)
         'grad_x_mean', 'grad_y_mean', 'grad_x_std', 'grad_y_std',  # Gradient (4)
         'morph_open', 'morph_close', 'open_diff', 'close_diff',    # Morphological (4)
-        'hist_0', 'hist_1', 'hist_2', 'hist_3', 'hist_4', 'hist_5', 'hist_6', 'hist_7',  # Histogram (8)
-        'symmetry'                                      # Symmetry (1)
+        'hist_0', 'hist_1', 'hist_2', 'hist_3', 'hist_4', 'hist_5', 'hist_6',  # Histogram (7)
     ]
 
     return dict(zip(feature_names, features))
