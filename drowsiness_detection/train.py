@@ -39,15 +39,13 @@ class AdvancedEyeStateClassifier:
         self.best_accuracy = 0
         self.best_pipeline_name = ""
         
-
-    
     def load_dataset(self, data_path='data/eyes'):
         """Load, preprocess and extract features from dataset"""
         X, y = [], []
         
         print("📂 Loading dataset with preprocessing + feature extraction...")
 
-        # Load open eyes (label = 1)
+        # Load mắt mở (gán nhãn open = 1)
         open_path = os.path.join(data_path, 'open')
         if os.path.exists(open_path):
             open_files = [f for f in os.listdir(open_path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
@@ -65,7 +63,7 @@ class AdvancedEyeStateClassifier:
                         X.append(features)
                         y.append(1)
         
-        # Load closed eyes (label = 0)
+        # Load mắt nhắm (gán nhãn closed = 0)
         closed_path = os.path.join(data_path, 'closed')
         if os.path.exists(closed_path):
             closed_files = [f for f in os.listdir(closed_path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
@@ -74,10 +72,7 @@ class AdvancedEyeStateClassifier:
                 img_path = os.path.join(closed_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None and img.size > 0:
-                    # ✅ BƯỚC 1: PREPROCESSING
                     img = preprocess_eye_image(img)
-
-                    # ✅ BƯỚC 2: FEATURE EXTRACTION
                     features = extract_eye_features(img)
                     if not np.any(np.isnan(features)):
                         X.append(features)
@@ -86,17 +81,17 @@ class AdvancedEyeStateClassifier:
         return np.array(X), np.array(y)
     
     def train_models_with_cv(self, X, y):
-        """Train pipelines with optimized strategy for best accuracy"""
-        print("\n🚀 Pipeline Training...")
+        print("\n Training...") 
         
+        # Split dataset : 20% test, 80% train (sử dụng stratify để giữ tỉ lệ nhãn và cross-validation = 3 để đánh giá nhanh)
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42, stratify=y
         )
         
         results = {}
         
-        # Strategy 1: Quick screening of all models
-        print("🔍 Quick model screening...")
+        # Strategy 1: Sàng lọc nhanh với tham số mặc định
+        print("Screening with default parameters:")
         for name, pipeline in tqdm(self.pipelines.items(), desc="Screening models"):
             cv_scores = cross_val_score(pipeline, X_train, y_train, cv=3, scoring='accuracy')
             results[name] = {
@@ -105,7 +100,7 @@ class AdvancedEyeStateClassifier:
             }
             print(f"   {name}: {cv_scores.mean():.4f} (±{cv_scores.std():.4f})")
 
-        # Strategy 2: Focus on top 2 performers with hyperparameter tuning
+        # Strategy 2: sử dụng GridSearchCV để tối ưu hóa 2 models tốt nhất
         sorted_models = sorted(results.items(), key=lambda x: x[1]['cv_mean'], reverse=True)
         top_models = [model[0] for model in sorted_models[:2]]
 
@@ -140,7 +135,6 @@ class AdvancedEyeStateClassifier:
                     'classifier__solver': ['liblinear', 'lbfgs']
                 }
 
-            # GridSearchCV with limited scope for speed
             grid_search = GridSearchCV(
                 self.pipelines[name],
                 param_grid,
@@ -152,7 +146,7 @@ class AdvancedEyeStateClassifier:
             grid_search.fit(X_train, y_train)
             best_pipeline = grid_search.best_estimator_
 
-            # Evaluate on test set
+            # Đánh giá trên tập test
             y_pred = best_pipeline.predict(X_test)
             accuracy = accuracy_score(y_test, y_pred)
             
@@ -174,7 +168,7 @@ class AdvancedEyeStateClassifier:
                 self.best_pipeline = best_pipeline
                 self.best_pipeline_name = name
 
-        # Strategy 3: Create ensemble of top models if both perform well
+        # Sử dụng mô hình ensemble nếu có ít nhất 2 models có accuracy >= 0.95 
         if len(final_results) >= 2:
             accuracies = [result['accuracy'] for result in final_results.values()]
             if min(accuracies) >= 0.95:  # Both models are good
@@ -204,6 +198,7 @@ class AdvancedEyeStateClassifier:
 
         return final_results
 
+    # Vẽ hình ảnh kết quả sau khi train vào models/training_results.png
     def plot_results(self, results):
         """Visualize training results"""
         try:
@@ -307,8 +302,8 @@ def main():
     # Save the best model
     classifier.save_model()
     
-    print("\n✅ Training completed successfully!")
-    print("📁 Files saved:")
+    print("\n Training completed successfully!")
+    print("Files saved:")
     print("   - models/eye_classifier.pkl (trained model)")
     print("   - models/training_results.png (visualization)")
 

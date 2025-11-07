@@ -3,7 +3,8 @@ import pickle
 import os
 from .face_detectors import FaceDetector
 from .ml_predictor import MLPredictor
-from .feature_extractor import extract_eye_features, calculate_ear_from_dlib_landmarks, calculate_ear_from_keypoints
+from .feature_extractor import extract_eye_features
+from .ear_calculator import calculate_ear_from_dlib_landmarks, calculate_ear_from_keypoints
 
 class DrowsinessDetector:
     def __init__(self):
