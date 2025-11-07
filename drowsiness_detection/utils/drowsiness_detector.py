@@ -12,15 +12,10 @@ class DrowsinessDetector:
 
         # Detection parameters
         self.EAR_THRESHOLD = 0.2  # dlib EAR threshold (0.2 = mắt đóng)
-        self.ML_THRESHOLD = 0.5   # ML confidence threshold (> 0.5 = closed eyes)
-        self.CONSECUTIVE_FRAMES = 10
+        self.CONSECUTIVE_FRAMES = 45
         self.frame_counter = 0
         self.alarm_playing = False
         
-        # EAR smoothing history (lọc nhiễu)
-        self.ear_history = []
-        self.ear_history_size = 3
-
         # Sound system
         try:
             import winsound
@@ -45,7 +40,7 @@ class DrowsinessDetector:
             return None
     
     def detect(self, frame):
-        """Main detection pipeline với kết hợp EAR (Dlib) + ML Confidence"""
+        """Main detection pipeline with dlib EAR-based eye state recognition"""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # Detect face and get dlib landmarks
@@ -132,34 +127,18 @@ class DrowsinessDetector:
                             pt = keypoints[key]
                             cv2.circle(frame, tuple(map(int, pt)), 4, (0, 255, 255), -1)
 
-        # ===== DROWSINESS DETECTION LOGIC: EAR + ML CONFIDENCE COMBINED =====
+        # ===== DROWSINESS DETECTION LOGIC =====
         drowsy_status = False
         
         if eyes_detected:
-            # Smoothing EAR: lấy trung bình 3 frame gần nhất để chống nhiễu
-            self.ear_history.append(ear_value)
-            if len(self.ear_history) > self.ear_history_size:
-                self.ear_history.pop(0)
-
-            smoothed_ear = sum(self.ear_history) / len(self.ear_history)
-
-            # Kết hợp EAR + ML Confidence: tính weighted score
-            # - EAR < threshold: mắt đóng (EAR thấp = mắt đóng)
-            # - ML confidence > threshold: model nhận diện mắt đóng
-            ear_score = 1.0 if smoothed_ear < self.EAR_THRESHOLD else 0.0
-            ml_score = 1.0 if ml_confidence > self.ML_THRESHOLD else 0.0
-
-            # Weighted combination: 70% EAR (chính xác hơn từ 68 landmarks) + 30% ML
-            combined_score = ear_score * 0.7 + ml_score * 0.3
-
-            # Nếu combined score >= 0.5, tính là mắt đóng
-            if combined_score >= 0.5:
+            # Eyes detected: check EAR threshold
+            if ear_value < self.EAR_THRESHOLD:
+                # Mắt đóng/nửa đóng
                 self.frame_counter += 1
             else:
+                # Mắt mở
                 self.frame_counter = 0
-        else:
-            self.frame_counter = 0
-
+        
         # Trigger alert if consecutive closed eye frames exceed threshold
         if self.frame_counter >= self.CONSECUTIVE_FRAMES:
             drowsy_status = True
@@ -182,7 +161,7 @@ class DrowsinessDetector:
                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         cv2.putText(frame, f"Frames Closed: {self.frame_counter}/{self.CONSECUTIVE_FRAMES}", 
                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
-        cv2.putText(frame, f"ML Confidence: {ml_confidence:.3f} | EAR: {ear_value:.3f}",
+        cv2.putText(frame, f"ML Confidence: {ml_confidence:.3f}",
                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
         if drowsy_status:
