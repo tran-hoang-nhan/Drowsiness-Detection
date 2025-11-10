@@ -11,7 +11,7 @@ from sklearn.pipeline import Pipeline
 import pickle
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from utils.feature_extractor import extract_eye_features, preprocess_eye_image
+from utils.feature_extractor import preprocess_eye_image, extract_eye_features
 
 class AdvancedEyeStateClassifier:
     def __init__(self):
@@ -63,7 +63,7 @@ class AdvancedEyeStateClassifier:
                         X.append(features)
                         y.append(1)
         
-        # Load mắt nhắm (gán nhãn closed = 0)
+        # Load mắt nhắm (gán nhãn close = 0)
         closed_path = os.path.join(data_path, 'closed')
         if os.path.exists(closed_path):
             closed_files = [f for f in os.listdir(closed_path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
@@ -90,7 +90,7 @@ class AdvancedEyeStateClassifier:
         
         results = {}
         
-        # Strategy 1: Sàng lọc nhanh với tham số mặc định
+        # Strategy 1: Sàng lọc nhanh với tham số ban đầu
         print("Screening with default parameters:")
         for name, pipeline in tqdm(self.pipelines.items(), desc="Screening models"):
             cv_scores = cross_val_score(pipeline, X_train, y_train, cv=3, scoring='accuracy')
@@ -112,23 +112,27 @@ class AdvancedEyeStateClassifier:
             print(f"\n🤖 Optimizing {name}...")
 
             # Hyperparameter tuning for top models
+    
             if name == 'random_forest':
                 param_grid = {
                     'classifier__n_estimators': [100, 200],
                     'classifier__max_depth': [10, 20, None],
                     'classifier__min_samples_split': [2, 5]
                 }
+                # Tổ hợp 2x3x2 = 12
             elif name == 'gradient_boosting':
                 param_grid = {
                     'classifier__n_estimators': [50, 100],
                     'classifier__learning_rate': [0.1, 0.2],
                     'classifier__max_depth': [3, 5]
                 }
+                # Tổ hợp 2x2x2 = 8
             elif name == 'svm':
                 param_grid = {
                     'classifier__C': [1, 10],
                     'classifier__gamma': ['scale', 'auto']
                 }
+                # Tổ hợp 2x2 = 4
             else:  # logistic
                 param_grid = {
                     'classifier__C': [1, 10],
@@ -138,7 +142,7 @@ class AdvancedEyeStateClassifier:
             grid_search = GridSearchCV(
                 self.pipelines[name],
                 param_grid,
-                cv=3,
+                cv=5,
                 scoring='accuracy',
                 n_jobs=-1
             )
@@ -275,10 +279,10 @@ def main():
         print("   - data/eyes/closed/ folder exists and contains images")
         return
     
-    print(f"✅ Dataset loaded: {len(X)} samples")
-    print(f"   Features per sample: {X.shape[1] if len(X.shape) > 1 else 'Unknown'}")
-    print(f"   Open eyes: {np.sum(y == 1)}")
-    print(f"   Closed eyes: {np.sum(y == 0)}")
+    print(f"Dataset loaded: {len(X)} samples")
+    print(f"Features per sample: {X.shape[1] if len(X.shape) > 1 else 'Unknown'}")
+    print(f"Open eyes: {np.sum(y == 1)}")
+    print(f"Closed eyes: {np.sum(y == 0)}")
 
     # Train models
     results = classifier.train_models_with_cv(X, y)

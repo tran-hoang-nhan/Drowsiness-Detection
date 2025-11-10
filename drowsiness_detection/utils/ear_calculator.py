@@ -90,16 +90,6 @@ class EARCalculator:
         except:
             return 0.0
     
-    def calculate_haar_ear(self, left_eye, right_eye):
-        """Calculate EAR from Haar eye regions"""
-        eye_width_avg = (left_eye[2] + right_eye[2]) / 2
-        eye_height_avg = (left_eye[3] + right_eye[3]) / 2
-        
-        if eye_width_avg > 0:
-            return eye_height_avg / eye_width_avg
-        else:
-            return 0.1
-    
     def extract_eye_region(self, gray_frame, eye_point, size=25):
         """Extract eye region from frame"""
         try:

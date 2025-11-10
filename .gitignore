@@ -1,1 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific - sửa đường dẫn
+drowsiness_detection/data/eyes/
+drowsiness_detection/models/*.pkl
+drowsiness_detection/models/*.h5
+drowsiness_detection/models/*.png
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Model files
+*.model
+*.joblib
+
+# Notebooks - sửa đường dẫn
+drowsiness_detection/feature_analysis.ipynb
+drowsiness_detection/model_training_test.ipynb
+drowsiness_detection/feature_analysis_detailed.ipynb
+drowsiness_detection/analysis.ipynb
+
+# Documentation
+drowsiness_detection/Chuong3_TienXuLy_TrichXuat.md
 drowsiness_detection/docs/3.1-phan-tich-he-thong.md
+
+drowsiness_detection/models/eye_classifier.pkl
+drowsiness_detection/models/eye_classifier.pkl
+drowsiness_detection/feature_analysis.ipynb
