@@ -13,7 +13,7 @@ class DrowsinessDetector:
 
         # Detection parameters
         self.EAR_THRESHOLD = 0.2  # dlib EAR threshold (0.2 = mắt đóng)
-        self.CONSECUTIVE_FRAMES = 45
+        self.CONSECUTIVE_FRAMES = 10
         self.frame_counter = 0
         self.alarm_playing = False
         
