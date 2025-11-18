@@ -30,13 +30,15 @@ class FaceDetector:
 
         # Initialize dlib for facial landmarks (for precise EAR calculation)
         try:
+            import os
+            model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'shape_predictor_68_face_landmarks.dat')
             self.dlib_detector = dlib.get_frontal_face_detector()
-            self.dlib_predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
+            self.dlib_predictor = dlib.shape_predictor(model_path)
             self.use_dlib = True
             print("✅ dlib facial landmarks loaded")
-        except:
+        except Exception as e:
             self.use_dlib = False
-            print("⚠️ dlib facial landmarks not available")
+            print(f"⚠️ dlib facial landmarks not available: {e}")
 
     def detect_mtcnn(self, frame):
         """Detect face using MTCNN"""

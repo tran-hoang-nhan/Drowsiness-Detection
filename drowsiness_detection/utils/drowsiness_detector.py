@@ -132,12 +132,13 @@ class DrowsinessDetector:
         drowsy_status = False
         
         if eyes_detected:
-            # Eyes detected: check EAR threshold
-            if ear_value < self.EAR_THRESHOLD:
-                # Mắt đóng/nửa đóng
+            # Eyes detected: use ML model to decide
+            # ML confidence > 0.7 = mắt đóng (ngưỡng 70% để tránh sai)
+            if ml_confidence > 0.7:
+                # Mắt đóng/nửa đóng (theo ML model)
                 self.frame_counter += 1
             else:
-                # Mắt mở
+                # Mắt mở (theo ML model)
                 self.frame_counter = 0
         
         # Trigger alert if consecutive closed eye frames exceed threshold

@@ -12,7 +12,9 @@ class MLPredictor:
     def load_model(self):
         """Load trained ML model"""
         try:
-            with open('models/eye_classifier.pkl', 'rb') as f:
+            import os
+            model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'eye_classifier.pkl')
+            with open(model_path, 'rb') as f:
                 model_data = pickle.load(f)
                 if isinstance(model_data, dict):
                     self.model = model_data.get('pipeline', model_data.get('model'))
