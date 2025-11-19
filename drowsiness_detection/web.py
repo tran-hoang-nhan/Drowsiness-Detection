@@ -93,4 +93,4 @@ def stop_detection():
     emit('detection_stopped', {'status': 'stopped'})
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='127.0.0.1', port=8080)
+    socketio.run(app, debug=True, host='127.0.0.1', port=8000)

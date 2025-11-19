@@ -132,8 +132,6 @@ class DrowsinessDetector:
         drowsy_status = False
         
         if eyes_detected:
-            # Eyes detected: use ML model to decide
-            # ML confidence > 0.7 = mắt đóng (ngưỡng 70% để tránh sai)
             if ml_confidence > 0.8:
                 # Mắt đóng/nửa đóng (theo ML model)
                 self.frame_counter += 1
