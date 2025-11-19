@@ -1,32 +1,23 @@
 """
-Face Detection Module - MTCNN + dlib Facial Landmarks
+Face Detection Module - Haar Cascade + dlib Facial Landmarks
 """
 import cv2
 import dlib
-
-try:
-    from mtcnn import MTCNN
-    MTCNN_AVAILABLE = True
-except Exception:
-    MTCNN_AVAILABLE = False
 
 class FaceDetector:
     def __init__(self):
         self.setup_detectors()
     
     def setup_detectors(self):
-        # Initialize MTCNN for face detection
-        if MTCNN_AVAILABLE:
-            try:
-                self.mtcnn = MTCNN()
-                self.use_mtcnn = True
-                print("✅ MTCNN loaded")
-            except:
-                self.use_mtcnn = False
-                print("⚠️ MTCNN failed to load")
-        else:
-            self.use_mtcnn = False
-            print("⚠️ MTCNN not available")
+        # Initialize Haar Cascade for face detection
+        try:
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            self.haar_cascade = cv2.CascadeClassifier(cascade_path)
+            self.use_haar = True
+            print("✅ Haar Cascade loaded")
+        except:
+            self.use_haar = False
+            print("⚠️ Haar Cascade failed to load")
 
         # Initialize dlib for facial landmarks (for precise EAR calculation)
         try:
@@ -40,23 +31,21 @@ class FaceDetector:
             self.use_dlib = False
             print(f"⚠️ dlib facial landmarks not available: {e}")
 
-    def detect_mtcnn(self, frame):
-        """Detect face using MTCNN"""
-        if not self.use_mtcnn:
+    def detect_haar(self, frame):
+        """Detect face using Haar Cascade"""
+        if not self.use_haar:
             return None
         
         try:
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = self.mtcnn.detect_faces(rgb_frame)
-
-            if result:
-                for face in result:
-                    if face['confidence'] > 0.8:
-                        return {
-                            'box': face['box'],
-                            'keypoints': face['keypoints'],
-                            'method': 'MTCNN'
-                        }
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = self.haar_cascade.detectMultiScale(gray, 1.1, 4, minSize=(30, 30))
+            
+            if len(faces) > 0:
+                x, y, w, h = faces[0]  # Get first face
+                return {
+                    'box': (x, y, w, h),
+                    'method': 'Haar Cascade'
+                }
         except:
             pass
 
@@ -95,12 +84,12 @@ class FaceDetector:
             return None
 
     def detect(self, frame):
-        """Main detection pipeline: MTCNN + dlib landmarks"""
-        detection = self.detect_mtcnn(frame)
+        """Main detection pipeline: Haar Cascade + dlib landmarks"""
+        detection = self.detect_haar(frame)
 
         if detection:
             face_box = detection['box']
-            # Get dlib landmarks using MTCNN face box
+            # Get dlib landmarks using Haar face box
             landmarks = self.detect_dlib_landmarks(frame, face_box)
 
             if landmarks:

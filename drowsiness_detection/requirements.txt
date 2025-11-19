@@ -13,11 +13,10 @@ requests>=2.31.0
 scipy>=1.11.0
 pillow>=10.0.0
 certifi
-mtcnn>=0.1.1
+dlib>=19.24.0
 imutils>=0.5.4
 
 # Optional - Install separately if needed
 # jupyter
 # notebook
-# tensorflow
 # pygame
