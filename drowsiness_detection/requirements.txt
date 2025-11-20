@@ -1,22 +1,31 @@
-# Core Dependencies - Minimal Setup
-flask>=2.3.0
-flask-socketio>=5.3.0
+# Web Framework
+Flask>=2.3.0
+Flask-SocketIO>=5.3.0
+python-socketio>=5.9.0
+
+# Computer Vision and Image Processing
 opencv-python>=4.8.0
 numpy>=1.24.0
-scikit-learn>=1.3.0
-scikit-image>=0.20.0
-matplotlib>=3.7.0
-pandas>=2.0.0
-seaborn>=0.12.0
-tqdm>=4.65.0
-requests>=2.31.0
 scipy>=1.11.0
-pillow>=10.0.0
-certifi
-dlib>=19.24.0
+scikit-image>=0.20.0
+Pillow>=10.0.0
 imutils>=0.5.4
+dlib>=19.24.0
 
-# Optional - Install separately if needed
-# jupyter
-# notebook
-# pygame
+# Machine Learning
+scikit-learn>=1.3.0
+
+# Data Processing and Visualization
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilities
+requests>=2.31.0
+tqdm>=4.65.0
+certifi>=2023.7.22
+
+# Optional - Install for development and analysis
+# jupyter>=1.0.0
+# notebook>=7.0.0
+# ipython>=8.0.0
